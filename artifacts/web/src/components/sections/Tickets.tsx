@@ -183,7 +183,7 @@ export function Tickets() {
             className="w-full flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors py-2 group"
           >
             <Tag className="w-4 h-4" />
-            <span>{promoApplied ? "Promo code applied" : "Have a promo code?"}</span>
+            <span>{promoApplied ? "Referral code applied" : "Have a referral code?"}</span>
             {promoApplied ? (
               <span className="inline-flex items-center gap-1 text-xs bg-green-500/15 text-green-400 px-2 py-0.5 rounded-full border border-green-500/20">
                 <Check className="w-3 h-3" />
@@ -213,7 +213,7 @@ export function Tickets() {
                         if (promoApplied) setPromoApplied(false);
                         if (promoError) setPromoError("");
                       }}
-                      placeholder="Enter referral or promo code"
+                      placeholder="Enter referral code"
                       className={`w-full bg-secondary/40 border text-white placeholder:text-muted-foreground text-sm px-4 py-3 rounded-none focus:outline-none focus:ring-1 transition-all uppercase tracking-wider font-mono ${
                         promoError
                           ? "border-red-500/50 focus:border-red-500/60 focus:ring-red-500/30"
