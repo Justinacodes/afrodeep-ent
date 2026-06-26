@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { db, ticketsTable, promotersTable } from "@workspace/db";
+import { eq, sum } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,13 +19,37 @@ export async function POST(req: NextRequest) {
     });
 
     const body = await req.json();
-    const { name, price, description } = body;
+    const { name, price, description, referralCode, capacityTaken = 1 } = body;
 
     if (!name || !price) {
       return NextResponse.json(
         { error: "Missing required ticket details (name, price)." },
         { status: 400 }
       );
+    }
+
+    // CHECK CAPACITY
+    const paidTicketsResult = await db
+      .select({ totalCapacity: sum(ticketsTable.capacityTaken) })
+      .from(ticketsTable)
+      .where(eq(ticketsTable.status, "paid"));
+    
+    const currentSold = Number(paidTicketsResult[0]?.totalCapacity || 0);
+    
+    if (currentSold + capacityTaken > 360) {
+      return NextResponse.json(
+        { error: `Sold out! Only ${Math.max(0, 360 - currentSold)} spots remaining.` },
+        { status: 400 }
+      );
+    }
+
+    // LOOKUP PROMOTER
+    let promoterId: number | undefined = undefined;
+    if (referralCode) {
+      const promoter = await db.query.promotersTable.findFirst({
+        where: eq(promotersTable.referralCode, referralCode)
+      });
+      if (promoter) promoterId = promoter.id;
     }
 
     // Convert price string (e.g. "£35", "£250") to integer pence
@@ -89,8 +115,18 @@ export async function POST(req: NextRequest) {
         },
       ],
       mode: "payment",
+      client_reference_id: name, // We can store the tier here if we want
       success_url: `${origin}/?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?canceled=true`,
+    });
+
+    // INSERT PENDING TICKET
+    await db.insert(ticketsTable).values({
+      stripeSessionId: session.id,
+      tier: name,
+      capacityTaken: capacityTaken,
+      status: "pending",
+      promoterId: promoterId,
     });
 
     return NextResponse.json({ url: session.url });

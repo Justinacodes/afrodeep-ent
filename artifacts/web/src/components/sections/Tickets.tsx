@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { Check, CreditCard, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Check, CreditCard, Loader2, Tag, ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
 
 const tiers = [
@@ -9,6 +9,7 @@ const tiers = [
     name: "Standard Entry",
     price: "£35",
     unit: "/ person",
+    capacity: 1,
     blurb: "General admission to the most exclusive boat party of the year.",
     features: ["Entry to the boat", "Access to all decks & bars", "Immersive music experience"],
     cta: "Reserve",
@@ -18,6 +19,7 @@ const tiers = [
     name: "VIP Table for 2",
     price: "£250",
     unit: "/ table",
+    capacity: 2,
     blurb: "Intimate VIP experience for two with a bottle included.",
     features: ["VIP Express Entry for 2", "Reserved Seating Area", "1 Bottle of Premium Spirits", "Priority Boarding"],
     cta: "Book Table for 2",
@@ -28,6 +30,7 @@ const tiers = [
     name: "VIP Table for 4",
     price: "£500",
     unit: "/ table",
+    capacity: 4,
     blurb: "The ultimate luxury experience for you and three guests.",
     features: ["VIP Express Entry for 4", "Reserved Seating Area", "2 Bottles of Premium Spirits", "Exclusive Food Platter", "Dedicated Hostess Service"],
     cta: "Book Table for 4",
@@ -38,11 +41,47 @@ const tiers = [
 
 export function Tickets() {
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoApplied, setPromoApplied] = useState(false);
+  const [promoOpen, setPromoOpen] = useState(false);
+
+  // On mount, check if a referral code came from the URL and pre-fill it
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const refFromUrl = searchParams.get("ref");
+    if (refFromUrl) {
+      setPromoCode(refFromUrl);
+      setPromoApplied(true);
+      setPromoOpen(true);
+    }
+  }, []);
+
+  const handleApplyPromo = () => {
+    const trimmed = promoCode.trim();
+    if (!trimmed) {
+      toast.error("Please enter a promo code");
+      return;
+    }
+    setPromoApplied(true);
+    toast.success("Promo code applied!", {
+      description: `Code "${trimmed}" will be used at checkout.`,
+    });
+  };
+
+  const handleClearPromo = () => {
+    setPromoCode("");
+    setPromoApplied(false);
+  };
 
   const handleCheckout = async (tier: typeof tiers[0]) => {
     try {
       setLoadingTier(tier.name);
-      
+
+      // Manual promo code takes priority; fall back to URL ?ref= param
+      const trimmedPromo = promoCode.trim();
+      const searchParams = new URLSearchParams(window.location.search);
+      const referralCode = trimmedPromo || searchParams.get("ref");
+
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: {
@@ -52,6 +91,8 @@ export function Tickets() {
           name: tier.name,
           price: tier.price,
           description: tier.blurb,
+          capacityTaken: tier.capacity,
+          referralCode: referralCode,
         }),
       });
 
@@ -94,6 +135,88 @@ export function Tickets() {
           <p className="text-muted-foreground max-w-2xl mx-auto">
             Choose your package below to book online via Stripe. All major cards accepted.
           </p>
+        </motion.div>
+
+        {/* Promo Code Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="max-w-md mx-auto mb-12"
+        >
+          <button
+            onClick={() => setPromoOpen(!promoOpen)}
+            className="w-full flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors py-2 group"
+          >
+            <Tag className="w-4 h-4" />
+            <span>{promoApplied ? "Promo code applied" : "Have a promo code?"}</span>
+            {promoApplied ? (
+              <span className="inline-flex items-center gap-1 text-xs bg-green-500/15 text-green-400 px-2 py-0.5 rounded-full border border-green-500/20">
+                <Check className="w-3 h-3" />
+                {promoCode}
+              </span>
+            ) : (
+              <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${promoOpen ? "rotate-180" : ""}`} />
+            )}
+          </button>
+
+          <AnimatePresence>
+            {promoOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                <div className="pt-3 flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={promoCode}
+                      onChange={(e) => {
+                        setPromoCode(e.target.value.toUpperCase());
+                        if (promoApplied) setPromoApplied(false);
+                      }}
+                      placeholder="Enter referral or promo code"
+                      className="w-full bg-secondary/40 border border-primary/20 text-white placeholder:text-muted-foreground text-sm px-4 py-3 rounded-none focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all uppercase tracking-wider font-mono"
+                    />
+                    {promoCode && (
+                      <button
+                        onClick={handleClearPromo}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleApplyPromo}
+                    disabled={!promoCode.trim() || promoApplied}
+                    className={`px-6 py-3 text-xs uppercase font-bold tracking-[0.15em] transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      promoApplied
+                        ? "bg-green-500/15 text-green-400 border border-green-500/30"
+                        : "bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20"
+                    }`}
+                  >
+                    {promoApplied ? (
+                      <span className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5" />
+                        Applied
+                      </span>
+                    ) : (
+                      "Apply"
+                    )}
+                  </button>
+                </div>
+                {promoApplied && (
+                  <p className="text-xs text-green-400/80 mt-2 text-center">
+                    This code will be linked to your purchase at checkout.
+                  </p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
