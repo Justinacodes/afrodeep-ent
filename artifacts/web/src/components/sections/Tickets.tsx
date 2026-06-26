@@ -43,18 +43,53 @@ export function Tickets() {
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
+  const [promoError, setPromoError] = useState("");
+  const [promoValidating, setPromoValidating] = useState(false);
+  const [promoterName, setPromoterName] = useState("");
   const [promoOpen, setPromoOpen] = useState(false);
 
-  // On mount, check if a referral code came from the URL and pre-fill it
+  // On mount, check if a referral code came from the URL and validate it
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const refFromUrl = searchParams.get("ref");
     if (refFromUrl) {
-      setPromoCode(refFromUrl);
-      setPromoApplied(true);
+      setPromoCode(refFromUrl.toUpperCase());
       setPromoOpen(true);
+      // Validate the URL referral code
+      validateCode(refFromUrl.toUpperCase());
     }
   }, []);
+
+  const validateCode = async (code: string) => {
+    setPromoValidating(true);
+    setPromoError("");
+    try {
+      const res = await fetch(`/api/validate-referral?code=${encodeURIComponent(code)}`);
+      const data = await res.json();
+      if (data.valid) {
+        setPromoApplied(true);
+        setPromoterName(data.name || "");
+        toast.success("Promo code applied!", {
+          description: data.name
+            ? `Referred by ${data.name}. Code will be linked to your purchase.`
+            : `Code "${code}" will be used at checkout.`,
+        });
+      } else {
+        setPromoApplied(false);
+        setPromoError("This referral code doesn't exist. Please check and try again.");
+        toast.error("Invalid promo code", {
+          description: "This referral code doesn't exist.",
+        });
+      }
+    } catch {
+      setPromoError("Could not verify the code. Please try again.");
+      toast.error("Verification failed", {
+        description: "Could not verify the code. Please try again.",
+      });
+    } finally {
+      setPromoValidating(false);
+    }
+  };
 
   const handleApplyPromo = () => {
     const trimmed = promoCode.trim();
@@ -62,15 +97,14 @@ export function Tickets() {
       toast.error("Please enter a promo code");
       return;
     }
-    setPromoApplied(true);
-    toast.success("Promo code applied!", {
-      description: `Code "${trimmed}" will be used at checkout.`,
-    });
+    validateCode(trimmed);
   };
 
   const handleClearPromo = () => {
     setPromoCode("");
     setPromoApplied(false);
+    setPromoError("");
+    setPromoterName("");
   };
 
   const handleCheckout = async (tier: typeof tiers[0]) => {
@@ -177,9 +211,14 @@ export function Tickets() {
                       onChange={(e) => {
                         setPromoCode(e.target.value.toUpperCase());
                         if (promoApplied) setPromoApplied(false);
+                        if (promoError) setPromoError("");
                       }}
                       placeholder="Enter referral or promo code"
-                      className="w-full bg-secondary/40 border border-primary/20 text-white placeholder:text-muted-foreground text-sm px-4 py-3 rounded-none focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all uppercase tracking-wider font-mono"
+                      className={`w-full bg-secondary/40 border text-white placeholder:text-muted-foreground text-sm px-4 py-3 rounded-none focus:outline-none focus:ring-1 transition-all uppercase tracking-wider font-mono ${
+                        promoError
+                          ? "border-red-500/50 focus:border-red-500/60 focus:ring-red-500/30"
+                          : "border-primary/20 focus:border-primary/60 focus:ring-primary/30"
+                      }`}
                     />
                     {promoCode && (
                       <button
@@ -192,14 +231,16 @@ export function Tickets() {
                   </div>
                   <button
                     onClick={handleApplyPromo}
-                    disabled={!promoCode.trim() || promoApplied}
+                    disabled={!promoCode.trim() || promoApplied || promoValidating}
                     className={`px-6 py-3 text-xs uppercase font-bold tracking-[0.15em] transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                       promoApplied
                         ? "bg-green-500/15 text-green-400 border border-green-500/30"
                         : "bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20"
                     }`}
                   >
-                    {promoApplied ? (
+                    {promoValidating ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : promoApplied ? (
                       <span className="flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5" />
                         Applied
@@ -209,9 +250,16 @@ export function Tickets() {
                     )}
                   </button>
                 </div>
+                {promoError && (
+                  <p className="text-xs text-red-400 mt-2 text-center">
+                    {promoError}
+                  </p>
+                )}
                 {promoApplied && (
                   <p className="text-xs text-green-400/80 mt-2 text-center">
-                    This code will be linked to your purchase at checkout.
+                    {promoterName
+                      ? `Referred by ${promoterName}. This code will be linked to your purchase.`
+                      : "This code will be linked to your purchase at checkout."}
                   </p>
                 )}
               </motion.div>
