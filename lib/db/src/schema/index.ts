@@ -1,6 +1,5 @@
 import { pgTable, text, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { z } from "zod";
+import { InferSelectModel, InferInsertModel } from "drizzle-orm";
 
 export const promotersTable = pgTable("promoters", {
   id: serial("id").primaryKey(),
@@ -19,12 +18,9 @@ export const ticketsTable = pgTable("tickets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Zod schemas for easy validation
-export const insertPromoterSchema = createInsertSchema(promotersTable);
-export const selectPromoterSchema = createSelectSchema(promotersTable);
+// Types inferred directly from Drizzle table definitions
+export type Promoter = InferSelectModel<typeof promotersTable>;
+export type NewPromoter = InferInsertModel<typeof promotersTable>;
 
-export const insertTicketSchema = createInsertSchema(ticketsTable);
-export const selectTicketSchema = createSelectSchema(ticketsTable);
-
-export type Promoter = z.infer<typeof selectPromoterSchema>;
-export type Ticket = z.infer<typeof selectTicketSchema>;
+export type Ticket = InferSelectModel<typeof ticketsTable>;
+export type NewTicket = InferInsertModel<typeof ticketsTable>;
