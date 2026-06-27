@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { db, ticketsTable, promotersTable } from "@workspace/db";
 import { eq, sum } from "drizzle-orm";
+import { randomUUID } from "crypto";
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,11 +20,18 @@ export async function POST(req: NextRequest) {
     });
 
     const body = await req.json();
-    const { name, price, description, referralCode, capacityTaken = 1 } = body;
+    const { name, price, description, referralCode, capacityTaken = 1, buyerName, buyerEmail } = body;
 
     if (!name || !price) {
       return NextResponse.json(
         { error: "Missing required ticket details (name, price)." },
+        { status: 400 }
+      );
+    }
+
+    if (!buyerName || !buyerEmail) {
+      return NextResponse.json(
+        { error: "Name and email are required." },
         { status: 400 }
       );
     }
@@ -102,12 +110,15 @@ export async function POST(req: NextRequest) {
       priceId = newPrice.id;
     }
 
+    // Generate unique QR token for this ticket
+    const qrToken = randomUUID();
+
     // Create Checkout Session
-    // We need an absolute URL for success/cancel URLs. We can derive this from the request url.
     const origin = new URL(req.url).origin;
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
+      customer_email: buyerEmail,
       line_items: [
         {
           price: priceId,
@@ -115,7 +126,13 @@ export async function POST(req: NextRequest) {
         },
       ],
       mode: "payment",
-      client_reference_id: name, // We can store the tier here if we want
+      client_reference_id: name,
+      metadata: {
+        qrToken,
+        buyerName,
+        buyerEmail,
+        tier: name,
+      },
       success_url: `${origin}/?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?canceled=true`,
     });
@@ -127,6 +144,9 @@ export async function POST(req: NextRequest) {
       capacityTaken: capacityTaken,
       status: "pending",
       promoterId: promoterId,
+      buyerName: buyerName,
+      buyerEmail: buyerEmail,
+      qrToken: qrToken,
     });
 
     return NextResponse.json({ url: session.url });

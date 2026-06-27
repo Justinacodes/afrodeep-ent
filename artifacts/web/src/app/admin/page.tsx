@@ -6,6 +6,7 @@ import { logoutAction } from "./actions";
 import { CreatePromoterDialog } from "./CreatePromoterDialog";
 import { CopyLinkButton } from "./CopyLinkButton";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -23,9 +24,11 @@ export default async function AdminDashboard() {
   // Calculate Overview Metrics
   let totalCapacity = 0;
   let totalRevenue = 0;
+  let checkedInCount = 0;
 
   paidTickets.forEach(ticket => {
     totalCapacity += ticket.capacityTaken;
+    if (ticket.checkedIn) checkedInCount += ticket.capacityTaken;
 
     // Calculate revenue based on tier
     if (ticket.tier === "Standard Entry") totalRevenue += 35;
@@ -66,6 +69,11 @@ export default async function AdminDashboard() {
             <p className="text-muted-foreground mt-1">Real-time metrics and ticket sales</p>
           </div>
           <div className="flex items-center gap-4">
+            <Link href="/admin/checkin">
+              <Button variant="outline" className="border-green-500/30 text-green-400 hover:bg-green-500/10">
+                🔍 Check-In Scanner
+              </Button>
+            </Link>
             <CreatePromoterDialog />
             <form action={logoutAction as any}>
               <Button variant="outline" className="border-primary/20 hover:bg-primary/10">Log Out</Button>
@@ -74,7 +82,7 @@ export default async function AdminDashboard() {
         </div>
 
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="bg-secondary/30 border-primary/20 backdrop-blur">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm uppercase tracking-widest text-muted-foreground">Capacity Sold</CardTitle>
@@ -97,6 +105,18 @@ export default async function AdminDashboard() {
             <CardContent>
               <div className="text-4xl font-black text-primary">£{totalRevenue.toLocaleString()}</div>
               <p className="text-xs text-muted-foreground mt-2">From {paidTickets.length} successful transactions</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-secondary/30 border-green-500/20 backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm uppercase tracking-widest text-muted-foreground">Checked In</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-black text-green-400">{checkedInCount} <span className="text-lg text-muted-foreground font-normal">/ {totalCapacity}</span></div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {totalCapacity > 0 ? Math.round((checkedInCount / totalCapacity) * 100) : 0}% attendance
+              </p>
             </CardContent>
           </Card>
 
@@ -164,25 +184,38 @@ export default async function AdminDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-white/10 hover:bg-transparent">
+                      <TableHead className="text-primary font-bold">Guest</TableHead>
                       <TableHead className="text-primary font-bold">Tier</TableHead>
-                      <TableHead className="text-primary font-bold">Time</TableHead>
                       <TableHead className="text-primary font-bold">Referral</TableHead>
+                      <TableHead className="text-right text-primary font-bold">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paidTickets.slice(0, 10).map((t) => {
+                    {paidTickets.slice(0, 15).map((t) => {
                       const promoter = promoters.find(p => p.id === t.promoterId);
                       return (
                         <TableRow key={t.id} className="border-white/10 hover:bg-white/5">
-                          <TableCell className="font-medium text-white text-xs">{t.tier}</TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
-                            {new Date(t.createdAt).toLocaleDateString()} {new Date(t.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          <TableCell className="text-white text-xs">
+                            <div className="font-medium">{t.buyerName || "—"}</div>
+                            <div className="text-muted-foreground/60 text-[10px]">{t.buyerEmail || ""}</div>
                           </TableCell>
+                          <TableCell className="font-medium text-white text-xs">{t.tier}</TableCell>
                           <TableCell className="text-xs">
                             {promoter ? (
                               <span className="text-primary">{promoter.name}</span>
                             ) : (
                               <span className="text-muted-foreground/50">Direct</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {t.checkedIn ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] bg-green-500/15 text-green-400 px-2 py-0.5 rounded-full border border-green-500/20 font-bold">
+                                ✓ In
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] bg-white/5 text-muted-foreground px-2 py-0.5 rounded-full border border-white/10">
+                                Pending
+                              </span>
                             )}
                           </TableCell>
                         </TableRow>

@@ -6,65 +6,65 @@ import QRCode from "qrcode";
 import { Resend } from "resend";
 import { TicketEmail } from "@/emails/ticket-email";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2026-05-27.dahlia",
-});
+export async function GET(req: NextRequest) {
+  const sessionId = req.nextUrl.searchParams.get("session_id");
 
-export async function POST(req: NextRequest) {
-  const bodyText = await req.text();
-  const signature = req.headers.get("stripe-signature") as string;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  if (!webhookSecret) {
-    return new NextResponse("Stripe webhook secret is not set.", { status: 500 });
+  if (!sessionId) {
+    return NextResponse.json({ error: "No session_id provided" }, { status: 400 });
   }
 
-  let event: Stripe.Event;
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+  }
+
+  const stripe = new Stripe(secretKey, {
+    apiVersion: "2026-05-27.dahlia",
+  });
 
   try {
-    event = stripe.webhooks.constructEvent(bodyText, signature, webhookSecret);
-  } catch (error: any) {
-    console.error(`Webhook Error: ${error.message}`);
-    return new NextResponse(`Webhook Error: ${error.message}`, { status: 400 });
-  }
-
-  // Handle the event
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const sessionId = session.id;
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     if (session.payment_status === "paid") {
-      try {
-        // Mark ticket as paid
+      // Check if ticket is already paid (avoid sending duplicate emails)
+      const ticket = await db.query.ticketsTable.findFirst({
+        where: eq(ticketsTable.stripeSessionId, sessionId),
+      });
+
+      if (ticket && ticket.status !== "paid") {
+        // Update ticket status to paid
         await db
           .update(ticketsTable)
           .set({ status: "paid" })
           .where(eq(ticketsTable.stripeSessionId, sessionId));
 
-        console.log(`Ticket for session ${sessionId} successfully marked as PAID!`);
-
-        // Look up the ticket to get attendee details
-        const ticket = await db.query.ticketsTable.findFirst({
-          where: eq(ticketsTable.stripeSessionId, sessionId),
-        });
-
-        if (ticket && ticket.qrToken && ticket.buyerEmail) {
-          await sendTicketEmail(ticket);
+        // Send confirmation email with QR code
+        if (ticket.buyerEmail && ticket.qrToken) {
+          await sendTicketEmail({
+            buyerName: ticket.buyerName,
+            buyerEmail: ticket.buyerEmail,
+            qrToken: ticket.qrToken,
+            tier: ticket.tier,
+          });
         }
-      } catch (err) {
-        console.error("Database update or email send failed:", err);
-        return new NextResponse("Processing Error", { status: 500 });
-      }
-    }
-  }
 
-  return new NextResponse(null, { status: 200 });
+        return NextResponse.json({ status: "paid", emailSent: true });
+      }
+
+      return NextResponse.json({ status: "paid", emailSent: false });
+    }
+
+    return NextResponse.json({ status: session.payment_status });
+  } catch (error: any) {
+    console.error("Verify payment error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
 
 async function sendTicketEmail(ticket: {
   buyerName: string;
   buyerEmail: string;
-  qrToken: string | null;
+  qrToken: string;
   tier: string;
 }) {
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -75,8 +75,7 @@ async function sendTicketEmail(ticket: {
 
   const resend = new Resend(resendApiKey);
 
-  // Build the check-in URL that the QR code will point to
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://afrodeepent.com";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.afrodeepent.com";
   const checkinUrl = `${baseUrl}/admin/checkin?token=${ticket.qrToken}`;
 
   // Generate QR code as PNG buffer for inline attachment
@@ -102,10 +101,6 @@ async function sendTicketEmail(ticket: {
           filename: "qrcode.png",
           content: qrCodeBuffer.toString("base64"),
           contentType: "image/png",
-          headers: {
-            "Content-ID": "<qrcode>",
-            "Content-Disposition": "inline",
-          },
         },
       ],
     });

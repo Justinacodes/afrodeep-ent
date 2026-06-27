@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, CreditCard, Loader2, Tag, ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
+import { CheckoutFormDialog } from "./CheckoutFormDialog";
 
 const tiers = [
   {
@@ -40,7 +41,7 @@ const tiers = [
 ];
 
 export function Tickets() {
-  const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [selectedTier, setSelectedTier] = useState<typeof tiers[0] | null>(null);
   const [promoCode, setPromoCode] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoError, setPromoError] = useState("");
@@ -88,8 +89,8 @@ export function Tickets() {
       });
     } finally {
       setPromoValidating(false);
-    }
-  };
+    } 
+  }; 
 
   const handleApplyPromo = () => {
     const trimmed = promoCode.trim();
@@ -107,45 +108,10 @@ export function Tickets() {
     setPromoterName("");
   };
 
-  const handleCheckout = async (tier: typeof tiers[0]) => {
-    try {
-      setLoadingTier(tier.name);
-
-      // Manual promo code takes priority; fall back to URL ?ref= param
-      const trimmedPromo = promoCode.trim();
-      const searchParams = new URLSearchParams(window.location.search);
-      const referralCode = trimmedPromo || searchParams.get("ref");
-
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: tier.name,
-          price: tier.price,
-          description: tier.blurb,
-          capacityTaken: tier.capacity,
-          referralCode: referralCode,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create checkout session");
-      }
-
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (error: any) {
-      console.error("Checkout error:", error);
-      toast.error("Checkout Failed", {
-        description: error.message || "Please try again later.",
-      });
-      setLoadingTier(null);
-    }
+  const getActiveReferralCode = () => {
+    const trimmedPromo = promoCode.trim();
+    const searchParams = new URLSearchParams(window.location.search);
+    return trimmedPromo || searchParams.get("ref") || "";
   };
 
   return (
@@ -316,20 +282,15 @@ export function Tickets() {
               </ul>
 
               <button
-                onClick={() => handleCheckout(tier)}
-                disabled={loadingTier !== null}
-                className={`w-full inline-flex items-center justify-center gap-2 py-4 uppercase font-bold tracking-[0.15em] text-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed ${
+                onClick={() => setSelectedTier(tier)}
+                className={`w-full inline-flex items-center justify-center gap-2 py-4 uppercase font-bold tracking-[0.15em] text-sm transition-all ${
                   tier.featured
                     ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(234,179,8,0.3)]"
                     : "bg-white text-background hover:bg-white/90"
                 }`}
               >
-                {loadingTier === tier.name ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <CreditCard className="w-4 h-4" />
-                )}
-                {loadingTier === tier.name ? "Redirecting..." : tier.cta}
+                <CreditCard className="w-4 h-4" />
+                {tier.cta}
               </button>
             </motion.div>
           ))}
@@ -344,6 +305,15 @@ export function Tickets() {
           Tickets are non-refundable &bull; All sales final &bull; ID required on entry
         </motion.p>
       </div>
+
+      {/* Checkout Form Dialog */}
+      {selectedTier && (
+        <CheckoutFormDialog
+          tier={selectedTier}
+          referralCode={getActiveReferralCode()}
+          onClose={() => setSelectedTier(null)}
+        />
+      )}
     </section>
   );
 }
