@@ -15,6 +15,13 @@ export const ticketsTable = pgTable("tickets", {
   capacityTaken: integer("capacity_taken").notNull(), // 1, 2, or 4
   status: text("status").notNull().default("pending"), // 'pending', 'paid', 'canceled'
   promoterId: integer("promoter_id").references(() => promotersTable.id),
+  // Attendee details
+  buyerName: text("buyer_name").notNull().default(""),
+  buyerEmail: text("buyer_email").notNull().default(""),
+  // QR code & check-in
+  qrToken: text("qr_token").unique(),
+  checkedIn: boolean("checked_in").notNull().default(false),
+  checkedInAt: timestamp("checked_in_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
