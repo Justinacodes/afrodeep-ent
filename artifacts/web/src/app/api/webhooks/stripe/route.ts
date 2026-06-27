@@ -76,7 +76,7 @@ async function sendTicketEmail(ticket: {
   const resend = new Resend(resendApiKey);
 
   // Build the check-in URL that the QR code will point to
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://afrodeepent.com";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.afrodeepent.com";
   const checkinUrl = `${baseUrl}/admin/checkin?token=${ticket.qrToken}`;
 
   // Generate QR code as PNG buffer for inline attachment
@@ -102,10 +102,6 @@ async function sendTicketEmail(ticket: {
           filename: "qrcode.png",
           content: qrCodeBuffer.toString("base64"),
           contentType: "image/png",
-          headers: {
-            "Content-ID": "<qrcode>",
-            "Content-Disposition": "inline",
-          },
         },
       ],
     });
